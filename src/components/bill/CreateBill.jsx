@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { createBill, generatePDF } from '../../store/slice/interiorBillingSlice';
 import { Plus, Minus, FileText, Trash2, Menu } from 'lucide-react';
-
+import { toast } from 'react-toastify';
 const CreateBill = () => {
   const dispatch = useDispatch();
   const [formData, setFormData] = useState({
@@ -69,37 +69,63 @@ const CreateBill = () => {
   };
 
   const grandTotal = formData.items.reduce((sum, item) => sum + item.total, 0);
+// In your CreateBill component
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  
+  try {
+      // Ensure terms and conditions are strings
+      const processedTerms = formData.termsAndConditions.map(term => 
+          typeof term === 'object' ? term.text : String(term)
+      );
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    const updatedPaymentTerms = formData.paymentTerms.map(term => ({
-      ...term,
-      amount: term.note === 'Token' ? term.amount : (grandTotal * term.percentage) / 100
-    }));
+      // Calculate payment terms
+      const updatedPaymentTerms = formData.paymentTerms.map(term => ({
+          ...term,
+          amount: term.note === 'Token' ? term.amount : (grandTotal * term.percentage) / 100
+      }));
 
-    const billData = {
-      ...formData,
-      paymentTerms: updatedPaymentTerms,
-      grandTotal
-    };
+      const billData = {
+          ...formData,
+          termsAndConditions: processedTerms,
+          paymentTerms: updatedPaymentTerms,
+          grandTotal
+      };
 
-    try {
+      // Create bill
       const result = await dispatch(createBill(billData)).unwrap();
-      const pdfBlob = await dispatch(generatePDF(result._id)).unwrap();
       
-      const url = window.URL.createObjectURL(pdfBlob);
+      if (!result || !result._id) {
+          throw new Error('Invalid response from server');
+      }
+
+      // Generate PDF
+      const pdfResult = await dispatch(generatePDF(result._id)).unwrap();
+      
+      if (!pdfResult) {
+          throw new Error('Failed to generate PDF');
+      }
+
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([pdfResult], { type: 'application/pdf' }));
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', `interior-bill-${result.billNumber}.pdf`);
       document.body.appendChild(link);
       link.click();
+      
+      // Cleanup
       link.remove();
       window.URL.revokeObjectURL(url);
-    } catch (error) {
+      
+      toast.success('Bill created and PDF generated successfully!');
+      
+  } catch (error) {
       console.error('Failed to generate bill:', error);
-    }
-  };
+      toast.error(error.message || 'Failed to create bill. Please try again.');
+  }
+};
+
 
   const MobileItemCard = ({ item, index }) => (
     <div className="bg-white/70 rounded-lg p-4 mb-4 shadow">
