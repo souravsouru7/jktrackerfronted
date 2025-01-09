@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
+import { motion } from "framer-motion";
 import { logout } from "../store/slice/authSlice";
 import {
   fetchMonthlyExpenses,
   fetchIncomeVsExpense,
   fetchCategoryExpenses,
 } from "../store/slice/analyticsSlice";
+import { fetchBalanceSummary } from "../store/slice/balanceSheetSlice";
 import {
   fetchProjects,
   createProject,
@@ -15,23 +17,14 @@ import {
 } from "../store/slice/projectSlice";
 import { Menu, X, Plus, Trash2 } from "lucide-react";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  PieChart,
-  Pie,
-  Cell,
-  ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  PieChart, Pie, Cell, ResponsiveContainer
 } from "recharts";
 
-// Lazy load the EntryForm component
+// Lazy loaded components
 const EntryForm = lazy(() => import("../components/addentry/EntryForm"));
 
-// Separate components for better performance
+// Component for mobile header
 const MobileHeader = React.memo(({ isOpen, setIsOpen }) => (
   <header className="sticky top-0 z-50 bg-white/10 backdrop-blur-md border-b border-[#B08968]/20">
     <div className="flex justify-between items-center px-4 py-4">
@@ -43,6 +36,7 @@ const MobileHeader = React.memo(({ isOpen, setIsOpen }) => (
   </header>
 ));
 
+// Component for mobile menu
 const MobileMenu = React.memo(({ isOpen, setIsOpen, navigate, dispatch }) => {
   const handleNavigation = useCallback((path) => {
     navigate(path);
@@ -89,18 +83,17 @@ const MobileMenu = React.memo(({ isOpen, setIsOpen, navigate, dispatch }) => {
   );
 });
 
+// Component for project list
 const ProjectList = React.memo(({ projects, selectedProject, onSelectProject, onDeleteProject }) => (
   <div className="space-y-2">
     {projects.map((project) => (
       <div
         key={project._id}
         className={`flex items-center justify-between p-3 rounded-lg ${
-          selectedProject?._id === project._id
-            ? 'bg-[#B08968] text-white'
-            : 'bg-white'
+          selectedProject?._id === project._id ? 'bg-[#B08968] text-white' : 'bg-white'
         }`}
       >
-        <span onClick={() => onSelectProject(project)} className="flex-1">
+        <span onClick={() => onSelectProject(project)} className="flex-1 cursor-pointer">
           {project.name}
         </span>
         <button onClick={() => onDeleteProject(project._id)} className="ml-2">
@@ -111,6 +104,43 @@ const ProjectList = React.memo(({ projects, selectedProject, onSelectProject, on
   </div>
 ));
 
+// Component for financial summary
+const FinancialSummary = React.memo(({ summary }) => (
+  <section className="bg-white/80 rounded-xl p-4">
+    <h2 className="text-lg font-semibold text-[#7F5539] mb-4">Financial Summary</h2>
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <motion.div 
+        whileHover={{ scale: 1.05 }}
+        className="bg-white/50 p-6 rounded-xl border border-[#B08968]/20 backdrop-blur-md"
+      >
+        <h3 className="text-lg font-semibold text-[#7F5539] mb-2">Total Income</h3>
+        <p className="text-3xl font-bold text-green-600">
+          ₹{(summary.totalIncome || 0).toFixed(2)}
+        </p>
+      </motion.div>
+      <motion.div 
+        whileHover={{ scale: 1.05 }}
+        className="bg-white/50 p-6 rounded-xl border border-[#B08968]/20 backdrop-blur-md"
+      >
+        <h3 className="text-lg font-semibold text-[#7F5539] mb-2">Total Expenses</h3>
+        <p className="text-3xl font-bold text-red-500">
+          ₹{(summary.totalExpenses || 0).toFixed(2)}
+        </p>
+      </motion.div>
+      <motion.div 
+        whileHover={{ scale: 1.05 }}
+        className="bg-white/50 p-6 rounded-xl border border-[#B08968]/20 backdrop-blur-md"
+      >
+        <h3 className="text-lg font-semibold text-[#7F5539] mb-2">Net Balance</h3>
+        <p className="text-3xl font-bold text-[#9C6644]">
+          ₹{(summary.netBalance || 0).toFixed(2)}
+        </p>
+      </motion.div>
+    </div>
+  </section>
+));
+
+// Component for charts
 const Charts = React.memo(({ monthlyExpenses, incomeVsExpense, colorPalette }) => (
   <>
     <section className="bg-white/80 rounded-xl p-4">
@@ -155,6 +185,7 @@ const Charts = React.memo(({ monthlyExpenses, incomeVsExpense, colorPalette }) =
   </>
 ));
 
+// Toast notification component
 const Toast = React.memo(({ message, type }) => (
   <div
     className={`fixed bottom-4 left-4 right-4 p-4 rounded-lg ${
@@ -165,7 +196,9 @@ const Toast = React.memo(({ message, type }) => (
   </div>
 ));
 
+// Main Dashboard component
 const Dashboard = () => {
+  // State
   const [isOpen, setIsOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectDescription, setNewProjectDescription] = useState("");
@@ -174,26 +207,25 @@ const Dashboard = () => {
   const [notificationType, setNotificationType] = useState("");
   const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
 
+  // Hooks
   const navigate = useNavigate();
   const dispatch = useDispatch();
   
+  // Memoized values
   const user = useMemo(() => JSON.parse(localStorage.getItem("user")), []);
   const userId = useMemo(() => user?._id || user?.id, [user]);
+  const colorPalette = useMemo(() => [
+    "#E6CCB2", "#DDB892", "#B08968", "#7F5539", "#9C6644", "#764134"
+  ], []);
 
+  // Selectors
   const projects = useSelector((state) => state.projects.projects);
   const selectedProject = useSelector((state) => state.projects.selectedProject);
   const monthlyExpenses = useSelector((state) => state.analytics.monthlyExpenses);
   const incomeVsExpense = useSelector((state) => state.analytics.incomeVsExpense);
+  const balanceSummary = useSelector((state) => state.balanceSheet.summary);
 
-  const colorPalette = useMemo(() => [
-    "#E6CCB2",
-    "#DDB892",
-    "#B08968",
-    "#7F5539",
-    "#9C6644",
-    "#764134"
-  ], []);
-
+  // Effects
   useEffect(() => {
     if (userId) {
       dispatch(fetchProjects(userId));
@@ -208,11 +240,13 @@ const Dashboard = () => {
       Promise.all([
         dispatch(fetchMonthlyExpenses({ userId, projectId })),
         dispatch(fetchIncomeVsExpense({ userId, projectId })),
-        dispatch(fetchCategoryExpenses({ userId, projectId }))
+        dispatch(fetchCategoryExpenses({ userId, projectId })),
+        dispatch(fetchBalanceSummary(userId))
       ]);
     }
   }, [dispatch, userId, selectedProject]);
 
+  // Callbacks
   const showToast = useCallback((message, type) => {
     setNotificationMessage(message);
     setNotificationType(type);
@@ -252,6 +286,7 @@ const Dashboard = () => {
     dispatch(selectProject(project));
   }, [dispatch]);
 
+  // Render
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#F5EBE0] via-[#E6CCB2] to-[#DDB892]">
       <MobileHeader isOpen={isOpen} setIsOpen={setIsOpen} />
@@ -300,11 +335,14 @@ const Dashboard = () => {
         </section>
 
         {selectedProject && (
-          <Charts
-            monthlyExpenses={monthlyExpenses}
-            incomeVsExpense={incomeVsExpense}
-            colorPalette={colorPalette}
-          />
+          <>
+            <FinancialSummary summary={balanceSummary} />
+            <Charts
+              monthlyExpenses={monthlyExpenses}
+              incomeVsExpense={incomeVsExpense}
+              colorPalette={colorPalette}
+            />
+          </>
         )}
 
         <button
@@ -322,9 +360,28 @@ const Dashboard = () => {
                 className="absolute top-4 right-4"
               >
                 <X size={24} className="text-[#7F5539]" />
-              </button>
-              <Suspense fallback={<div>Loading...</div>}>
-                <EntryForm onClose={() => setIsEntryModalOpen(false)} />
+                </button>
+              <Suspense fallback={
+                <div className="flex items-center justify-center p-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#B08968]"></div>
+                </div>
+              }>
+                <EntryForm 
+                  onClose={() => setIsEntryModalOpen(false)} 
+                  projectId={selectedProject?._id}
+                  onSuccess={() => {
+                    setIsEntryModalOpen(false);
+                    showToast("Entry added successfully", "success");
+                    // Refresh data
+                    if (selectedProject && userId) {
+                      const projectId = selectedProject._id;
+                      dispatch(fetchMonthlyExpenses({ userId, projectId }));
+                      dispatch(fetchIncomeVsExpense({ userId, projectId }));
+                      dispatch(fetchCategoryExpenses({ userId, projectId }));
+                      dispatch(fetchBalanceSummary(userId));
+                    }
+                  }}
+                />
               </Suspense>
             </div>
           </div>
@@ -337,5 +394,44 @@ const Dashboard = () => {
     </div>
   );
 };
+
+// Create a prop types validator for each component if needed
+// ProjectList.propTypes = {
+//   projects: PropTypes.array.isRequired,
+//   selectedProject: PropTypes.object,
+//   onSelectProject: PropTypes.func.isRequired,
+//   onDeleteProject: PropTypes.func.isRequired,
+// };
+
+// FinancialSummary.propTypes = {
+//   summary: PropTypes.shape({
+//     totalIncome: PropTypes.number,
+//     totalExpenses: PropTypes.number,
+//     netBalance: PropTypes.number,
+//   }).isRequired,
+// };
+
+// Charts.propTypes = {
+//   monthlyExpenses: PropTypes.array.isRequired,
+//   incomeVsExpense: PropTypes.array.isRequired,
+//   colorPalette: PropTypes.arrayOf(PropTypes.string).isRequired,
+// };
+
+// MobileHeader.propTypes = {
+//   isOpen: PropTypes.bool.isRequired,
+//   setIsOpen: PropTypes.func.isRequired,
+// };
+
+// MobileMenu.propTypes = {
+//   isOpen: PropTypes.bool.isRequired,
+//   setIsOpen: PropTypes.func.isRequired,
+//   navigate: PropTypes.func.isRequired,
+//   dispatch: PropTypes.func.isRequired,
+// };
+
+// Toast.propTypes = {
+//   message: PropTypes.string.isRequired,
+//   type: PropTypes.oneOf(['success', 'error']).isRequired,
+// };
 
 export default React.memo(Dashboard);
